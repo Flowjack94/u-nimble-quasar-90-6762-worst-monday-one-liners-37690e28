@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Worst Monday One-Liners — entry generator.
 
-Writes the one-line entry to ./entry.txt and /output/entry.txt, validating
-the competition gate: exactly one line, 1-140 characters, valid UTF-8,
-non-blank, no leading/trailing whitespace, no BOM. Then verifies the two
-files agree byte-for-byte (sha256 digest match) before reporting success.
+Writes the one-line entry to the output directory only
+($MAKEFUN_OUTPUT_DIR, default /output), validating the competition gate:
+exactly one line, 1-140 characters, valid UTF-8, non-blank, no
+leading/trailing whitespace, no BOM. Then reads the file back and verifies
+it is byte-identical to the entry (sha256 digest match) before reporting
+success. The repository directory is never written to: the grader mounts
+it read-only.
 """
 
 import hashlib
@@ -41,18 +44,17 @@ def main() -> int:
     if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
         print("entry must not contain control characters", file=sys.stderr)
         return 1
-    here = os.path.dirname(os.path.abspath(__file__))
-    os.makedirs("/output", exist_ok=True)
-    with open(os.path.join(here, "entry.txt"), "wb") as f:
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "entry.txt")
+    with open(out_path, "wb") as f:
         f.write(data)
-    with open("/output/entry.txt", "wb") as f:
-        f.write(data)
-    with open(os.path.join(here, "entry.txt"), "rb") as f:
-        local = f.read()
-    with open("/output/entry.txt", "rb") as f:
+        f.flush()
+        os.fsync(f.fileno())
+    with open(out_path, "rb") as f:
         out = f.read()
-    if local != data or out != data or sha256_hex(local) != sha256_hex(out):
-        print("entry.txt and /output/entry.txt disagree with ENTRY", file=sys.stderr)
+    if out != data or sha256_hex(out) != sha256_hex(data):
+        print("output entry.txt disagrees with ENTRY", file=sys.stderr)
         return 1
     print(f"entry ok: {len(text)} chars, sha256 {sha256_hex(data)}")
     return 0
